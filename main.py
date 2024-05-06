@@ -40,7 +40,9 @@ def draw_info(image, landmarks, info_text):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0)
+    parser.add_argument('--use_static_image_mode', action='store_true')
     args = parser.parse_args()
+    use_static_image_mode = args.use_static_image_mode
 
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
@@ -81,6 +83,7 @@ def main():
     finger_gesture_history = deque(maxlen=history_length)
 
     with mp_hands.Hands(
+            static_image_mode=use_static_image_mode,
             max_num_hands=2,
             model_complexity=0,
             min_detection_confidence=0.75,
@@ -121,36 +124,47 @@ def main():
                     pre_processed_landmark_list = pre_process_landmark(landmark_list)
                     pre_processed_point_history_list = pre_process_point_history(image, point_history)
 
+
+
+                    confidence, hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
+
+                    if hand_sign_id == 1:
+                        point_history.append(landmark_list[8])
+                    else:
+                        point_history.append([0,0])
+
+                    if (confidence > 0.75):
+                        info_text = keypoint_classifier_labels[hand_sign_id-1]
+                    else:
+                        info_text = None
+
                     # Finger gesture classification
                     finger_gesture_id = 0
                     point_history_len = len(pre_processed_point_history_list)
                     if point_history_len == (history_length * 2):
-                        finger_gesture_id = point_history_classifier(
-                            pre_processed_point_history_list)
+                        finger_gesture_id = point_history_classifier(pre_processed_point_history_list)
 
                     finger_gesture_history.append(finger_gesture_id)
                     most_common_fg_id = Counter(finger_gesture_history).most_common()
 
-                    confidence, hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
-                    hand_sign_text = keypoint_classifier_labels[hand_sign_id]
-
-                    info_text = hand_sign_text
-                    if hand_sign_id == 2:  # Point gesture
-                        point_history.append(landmark_list[8])
-                    else:
-                        point_history.append([0, 0])
-
-                    if (confidence > 0.75):
-                        info_text = keypoint_classifier_labels[hand_sign_id - 1]
-                    else:
-                        info_text = None
                     image = draw_info(image, hand_landmarks, info_text)
-                    image = draw_landmarks(image,landmark_list)
+                    image = draw_landmarks(image, landmark_list)
+                    image = draw_info_text(
+                        image,point_history_classifier_labels[most_common_fg_id[0][0]] )
+
+
+
+
+
+
                     #print(info_text)
+                    #accumulation
                     gesture_detected = info_text
                     if gesture_detected and time.time() - last_gesture_time > gesture_cooldown:
                         accumulated_gestures.append(gesture_detected)
                         last_gesture_time = time.time()
+
+
 
 
 
@@ -396,6 +410,17 @@ def draw_point_history(image, point_history):
                       (152, 251, 152), 2)
 
     return image
+
+def draw_info_text(image,finger_gesture_text):
+    if finger_gesture_text != "":
+        cv2.putText(image, "Finger Gesture:" + finger_gesture_text, (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 4, cv2.LINE_AA)
+        cv2.putText(image, "Finger Gesture:" + finger_gesture_text, (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2,
+                   cv2.LINE_AA)
+
+    return image
+
 
 
 
